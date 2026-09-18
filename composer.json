@@ -1,11 +1,11 @@
 {
-    "name": "surface/framebuffers",
+    "name": "venusian-surface/framebuffers",
     "description": "Surface framebuffers: the php storage driver (packings, PackedGrid, five buffer kinds), PixelMapper, and the framebuffer.<driver> manager.",
     "license": "MIT",
     "authors": [{"name": "Angel Gonzalez", "email": "angel@projectsaturnstudios.com"}],
     "require": {
         "php": "^8.4|^8.5|^8.6",
-        "surface/contracts": "^0.8.0",
+        "venusian-surface/contracts": "^0.8.0",
         "venusian-voyager/contracts": "^0.8.0",
         "venusian-voyager/magic-aliases": "^0.8.0",
         "venusian-voyager/nuts-and-bolts": "^0.8.0"
