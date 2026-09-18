@@ -1,37 +1,26 @@
 {
-    "name": "tubes/framebuffers",
-    "description": "The Tubes Framebuffers component.",
+    "name": "surface/framebuffers",
+    "description": "Surface framebuffers: the php storage driver (packings, PackedGrid, five buffer kinds), PixelMapper, and the framebuffer.<driver> manager.",
     "license": "MIT",
-    "authors": [
-        {
-            "name": "Angel Gonzalez",
-            "email": "angel@projectsaturnstudios.com"
-        }
-    ],
-    "homepage": "https://scrapyard-io.projectsaturnstudios.com/ecosystem/scrapyard-io/tubes/0.7.x/framebuffers",
-    "support": {
-        "issues": "https://github.com/scrapyard-io/tubes/issues",
-        "source": "https://github.com/scrapyard-io/tubes"
-    },
+    "authors": [{"name": "Angel Gonzalez", "email": "angel@projectsaturnstudios.com"}],
     "require": {
         "php": "^8.4|^8.5|^8.6",
-        "fabricate/nuts-and-bolts": "^0.7.0",
-        "tubes/contracts": "^0.7.0"
+        "surface/contracts": "^0.8.0",
+        "venusian-voyager/contracts": "^0.8.0",
+        "venusian-voyager/magic-aliases": "^0.8.0",
+        "venusian-voyager/nuts-and-bolts": "^0.8.0"
+    },
+    "suggest": {
+        "jovian/fb": "^0.8.0 - The native framebuffer driver over ext-fb: the five buffer kinds in C."
     },
     "minimum-stability": "dev",
-    "autoload": {
-        "psr-4": {
-            "ScrapyardIO\\Tubes\\Framebuffers\\": ""
-        }
-    },
-    "config": {
-        "sort-packages": true
-    },
+    "autoload": {"psr-4": {"Surface\\Framebuffers\\": ""}},
+    "config": {"sort-packages": true},
     "extra": {
-        "branch-alias": {
-            "dev-master": "0.7.x-dev",
-            "dev-main": "0.7.x-dev",
-            "dev-0.7.x": "0.7.x-dev"
+        "branch-alias": {"dev-main": "0.8.x-dev"},
+        "venusian": {
+            "providers": ["Surface\\Framebuffers\\FramebuffersServiceProvider"],
+            "aliases": {"Framebuffers": "Surface\\Framebuffers\\MagicAliases\\Framebuffers"}
         }
     }
 }
