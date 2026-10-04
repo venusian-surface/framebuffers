@@ -4,6 +4,7 @@ namespace Surface\Framebuffers\Extended;
 
 use FbBuffer;
 use Surface\Contracts\Framebuffers\DamageGranularity;
+use Surface\Contracts\Framebuffers\Filter;
 use Surface\Contracts\Framebuffers\FormatSpec;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
@@ -131,6 +132,15 @@ final class ExtendedPixelStore implements PixelStore
     {
         try {
             return self::region_of($this->buffer->paintSpans($spans, $rgba8));
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function paintRgba8(string $rgba8, int $width, int $height, array $inverse, Region $target, int $opacity, Filter $filter, int $row = 0): void
+    {
+        try {
+            $this->buffer->paintRgba8($rgba8, $width, $height, $inverse, $target->x, $target->y, $target->width, $target->height, $opacity, $filter === Filter::LINEAR, $row);
         } catch (ValueError $e) {
             throw new FramebufferException($e->getMessage(), previous: $e);
         }

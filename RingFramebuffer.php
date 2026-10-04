@@ -3,11 +3,13 @@
 namespace Surface\Framebuffers;
 
 use Surface\Contracts\Framebuffers\DamageGranularity;
+use Surface\Contracts\Framebuffers\Filter;
 use Surface\Contracts\Framebuffers\FormatSpec;
 use Surface\Contracts\Framebuffers\Framebuffer;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\RingFramebuffer as RingFramebufferContract;
+use Surface\NutsAndBolts\Affine;
 
 /**
  * A swap chain of $frames whole frames. Each frame is a dirty framebuffer, so
@@ -246,6 +248,13 @@ abstract class RingFramebuffer implements RingFramebufferContract
     public function paintSpans(string $spans, int $rgba8): static
     {
         $this->slots[$this->drawable()]->paintSpans($spans, $rgba8);
+
+        return $this;
+    }
+
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    {
+        $this->slots[$this->drawable()]->paintImage($source, $placement, $opacity, $filter, $clip);
 
         return $this;
     }

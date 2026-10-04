@@ -3,11 +3,13 @@
 namespace Surface\Framebuffers;
 
 use Surface\Contracts\Framebuffers\DamageGranularity;
+use Surface\Contracts\Framebuffers\Filter;
 use Surface\Contracts\Framebuffers\FormatSpec;
 use Surface\Contracts\Framebuffers\Framebuffer;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
 use Surface\Contracts\Framebuffers\Region;
+use Surface\NutsAndBolts\Affine;
 
 /**
  * The whole Framebuffer contract over one PixelStore. Subclasses say where the
@@ -91,6 +93,19 @@ abstract class StoreFramebuffer implements Framebuffer
     public function paintSpans(string $spans, int $rgba8): static
     {
         return $this->wrote($this->store->paintSpans($spans, $rgba8));
+    }
+
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    {
+        [$rgba8, $width, $height, $top] = $this->blitSource($source);
+        $plan = ImagePlacement::plan($placement, $width, $height, $top, Region::wholeSurface($this->width, $this->height), $clip, $opacity);
+        if (is_null($plan)) {
+            return $this;
+        }
+        [$target, $inverse] = $plan;
+        $this->store->paintRgba8($rgba8, $width, $height, $inverse, $target, $opacity, $filter);
+
+        return $this->wrote($target);
     }
 
     public function clear(): static

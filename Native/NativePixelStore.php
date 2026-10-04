@@ -3,6 +3,7 @@
 namespace Surface\Framebuffers\Native;
 
 use Surface\Contracts\Framebuffers\DamageGranularity;
+use Surface\Contracts\Framebuffers\Filter;
 use Surface\Contracts\Framebuffers\FormatSpec;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
@@ -183,17 +184,99 @@ final class NativePixelStore implements PixelStore
                 continue;
             }
             for ($i = $x; $i < $x + $length; $i++) {
-                $d = $this->mapper->toRgba8($this->packing->get($this->bytes, $i, $y));
-                $this->packing->set($this->bytes, $i, $y, $this->mapper->fromRgba8(
-                    intdiv($red * $a + (($d >> 24) & 0xFF) * (255 - $a) + 127, 255),
-                    intdiv($green * $a + (($d >> 16) & 0xFF) * (255 - $a) + 127, 255),
-                    intdiv($blue * $a + (($d >> 8) & 0xFF) * (255 - $a) + 127, 255),
-                    intdiv(255 * $a + ($d & 0xFF) * (255 - $a) + 127, 255),
-                ));
+                $this->blend($i, $y, $red, $green, $blue, $a, true);
             }
         }
 
         return $bounds;
+    }
+
+    public function paintRgba8(string $rgba8, int $width, int $height, array $inverse, Region $target, int $opacity, Filter $filter, int $row = 0): void
+    {
+        if ($width < 1 || $height < 1 || strlen($rgba8) !== $width * $height * 4) {
+            throw new FramebufferException("paintRgba8() takes {$width}x{$height} RGBA8 pixels (".($width * $height * 4).' bytes), got '.strlen($rgba8).'.');
+        }
+        if ($opacity < 0 || $opacity > 255) {
+            throw new FramebufferException("paintRgba8() takes an opacity 0..255, got {$opacity}.");
+        }
+        if ($row < 0 || $row > 0xFFFF) {
+            throw new FramebufferException("paintRgba8() takes a row 0..65535, got {$row}.");
+        }
+        if (count($inverse) !== 6 || array_filter($inverse, fn (mixed $n): bool => (is_int($n) || is_float($n)) && is_finite($n)) !== $inverse) {
+            throw new FramebufferException('paintRgba8() takes an inverse of six finite numbers.');
+        }
+        $this->inside($target);
+
+        [$ia, $ib, $ic, $id, $ie, $if] = array_values($inverse);
+        $smooth = $filter === Filter::LINEAR;
+        $blends = in_array($this->mapper->mode(), [PixelMapperMode::RGB, PixelMapperMode::GREY], true);
+
+        for ($y = $target->y; $y < $target->bottom(); $y++) {
+            $py = ($y + $row) + 0.5;
+            for ($x = $target->x; $x < $target->right(); $x++) {
+                $px = $x + 0.5;
+                $u = $ia * $px + $ic * $py + $ie;
+                $v = $ib * $px + $id * $py + $if;
+                if (! ($u >= 0 && $u < $width && $v >= 0 && $v < $height)) {
+                    continue;
+                }
+
+                if (! $smooth) {
+                    $i = ((int) floor($v) * $width + (int) floor($u)) * 4;
+                    [$red, $green, $blue, $alpha] = [ord($rgba8[$i]), ord($rgba8[$i + 1]), ord($rgba8[$i + 2]), ord($rgba8[$i + 3])];
+                } else {
+                    // The four pixels around the point, weights in 1/256ths, colours weighed by their alpha.
+                    $fx = $u - 0.5;
+                    $x0 = floor($fx);
+                    $tx = (int) floor(($fx - $x0) * 256);
+                    $fy = $v - 0.5;
+                    $y0 = floor($fy);
+                    $ty = (int) floor(($fy - $y0) * 256);
+                    $xa = max(0, min($width - 1, (int) $x0));
+                    $xb = max(0, min($width - 1, (int) $x0 + 1));
+                    $ya = max(0, min($height - 1, (int) $y0));
+                    $yb = max(0, min($height - 1, (int) $y0 + 1));
+
+                    $sum = $red = $green = $blue = 0;
+                    foreach ([[$ya, $xa, (256 - $tx) * (256 - $ty)], [$ya, $xb, $tx * (256 - $ty)], [$yb, $xa, (256 - $tx) * $ty], [$yb, $xb, $tx * $ty]] as [$source_row, $source_column, $weight]) {
+                        $i = ($source_row * $width + $source_column) * 4;
+                        $weighed = $weight * ord($rgba8[$i + 3]);
+                        $sum += $weighed;
+                        $red += $weighed * ord($rgba8[$i]);
+                        $green += $weighed * ord($rgba8[$i + 1]);
+                        $blue += $weighed * ord($rgba8[$i + 2]);
+                    }
+                    if ($sum === 0) {
+                        continue;
+                    }
+                    $half = intdiv($sum, 2);
+                    [$red, $green, $blue, $alpha] = [intdiv($red + $half, $sum), intdiv($green + $half, $sum), intdiv($blue + $half, $sum), ($sum + 32768) >> 16];
+                }
+
+                $this->blend($x, $y, $red, $green, $blue, intdiv($alpha * $opacity + 127, 255), $blends);
+            }
+        }
+    }
+
+    /** One pixel, source-over at alpha $a where the format blends; the colour itself from 128 up where it cannot. */
+    private function blend(int $x, int $y, int $red, int $green, int $blue, int $a, bool $blends): void
+    {
+        if ($a === 0 || (! $blends && $a < 128)) {
+            return;
+        }
+        if ($a === 255 || ! $blends) {
+            $this->packing->set($this->bytes, $x, $y, $this->mapper->fromRgba8($red, $green, $blue));
+
+            return;
+        }
+
+        $d = $this->mapper->toRgba8($this->packing->get($this->bytes, $x, $y));
+        $this->packing->set($this->bytes, $x, $y, $this->mapper->fromRgba8(
+            intdiv($red * $a + (($d >> 24) & 0xFF) * (255 - $a) + 127, 255),
+            intdiv($green * $a + (($d >> 16) & 0xFF) * (255 - $a) + 127, 255),
+            intdiv($blue * $a + (($d >> 8) & 0xFF) * (255 - $a) + 127, 255),
+            intdiv(255 * $a + ($d & 0xFF) * (255 - $a) + 127, 255),
+        ));
     }
 
     public function copy(PixelStore $source, Region $region): void
