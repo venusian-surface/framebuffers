@@ -1,0 +1,53 @@
+{
+    "name": "venusian-surface/framebuffers",
+    "description": "Surface framebuffers: pixel storage behind a FormatSpec in five kinds (full, dirty, ring, paged, ePaper), with the bytes held in PHP or in C through ext-fb.",
+    "keywords": [
+        "venusian",
+        "surface",
+        "framebuffer",
+        "pixels",
+        "epaper"
+    ],
+    "license": "MIT",
+    "homepage": "https://venusian.projectsaturnstudios.com/ecosystem/venusian/surface/0.10.x/framebuffers",
+    "support": {
+        "issues": "https://github.com/VenusianPHP/surface/issues",
+        "source": "https://github.com/venusian-surface/framebuffers"
+    },
+    "authors": [
+        {
+            "name": "Angel Gonzalez",
+            "email": "angel@projectsaturnstudios.com"
+        }
+    ],
+    "require": {
+        "php": "^8.4|^8.5|^8.6",
+        "venusian-surface/contracts": "^0.10.0",
+        "venusian-surface/nuts-and-bolts": "^0.10.0",
+        "venusian-voyager/contracts": "^0.10.1",
+        "venusian-voyager/nuts-and-bolts": "^0.10.1"
+    },
+    "suggest": {
+        "ext-fb": "^0.10.0 - The 'extended' driver: the same five kinds with their bytes held in C."
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "Surface\\Framebuffers\\": ""
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.10.x-dev"
+        },
+        "venusian": {
+            "providers": [
+                "Surface\\Framebuffers\\FramebuffersServiceProvider"
+            ]
+        }
+    }
+}
