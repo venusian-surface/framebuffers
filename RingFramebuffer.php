@@ -285,6 +285,13 @@ abstract class RingFramebuffer implements RingFramebufferContract
         return $this;
     }
 
+    public function writeRgba8(string $rgba8, int $width, int $height, int $x = 0, int $y = 0): static
+    {
+        $this->slots[$this->drawable()]->writeRgba8($rgba8, $width, $height, $x, $y);
+
+        return $this;
+    }
+
     public function dump(?int $layer = null): string
     {
         return $this->slots[$this->front]->dump($layer);

@@ -24,6 +24,9 @@ final class NativePixelStore implements PixelStore
 
     private PixelMapper $mapper;
 
+    /** Whether the bytes already are RGBA8 rows, top row first: then RGBA8 reads and writes copy rows whole. */
+    private bool $plain;
+
     public function __construct(
         private readonly FormatSpec $format,
         private readonly int $width,
@@ -33,6 +36,7 @@ final class NativePixelStore implements PixelStore
         $this->packing = Packing::for($format, $width, $height);
         $this->mapper = PixelMapper::for($format);
         $this->bytes = $this->packing->blank();
+        $this->plain = $format->equals(FormatSpec::rgba8());
     }
 
     public function width(): int
@@ -132,6 +136,10 @@ final class NativePixelStore implements PixelStore
 
     public function toRgba8(): string
     {
+        if ($this->plain) {
+            return $this->bytes;
+        }
+
         $out = '';
         for ($y = 0; $y < $this->height; $y++) {
             for ($x = 0; $x < $this->width; $x++) {
@@ -156,6 +164,12 @@ final class NativePixelStore implements PixelStore
             return null;
         }
 
+        if ($this->plain) {
+            $this->spliceRgba8($rgba8, $width, $offset_x, $offset_y, $target);
+
+            return $target;
+        }
+
         for ($y = $target->y; $y < $target->bottom(); $y++) {
             $i = (($y - $offset_y) * $width + $target->x - $offset_x) * 4;
             for ($x = $target->x; $x < $target->right(); $x++, $i += 4) {
@@ -164,6 +178,23 @@ final class NativePixelStore implements PixelStore
         }
 
         return $target;
+    }
+
+    /** Rebuild the bytes once from the untouched parts and the block's rows: one pass over the surface, not one call per pixel. */
+    private function spliceRgba8(string $rgba8, int $width, int $offset_x, int $offset_y, Region $target): void
+    {
+        $stride = $this->width * 4;
+        $left = $target->x * 4;
+        $run = $target->width * 4;
+        $parts = [substr($this->bytes, 0, $target->y * $stride)];
+        for ($y = $target->y; $y < $target->bottom(); $y++) {
+            $row = $y * $stride;
+            $parts[] = substr($this->bytes, $row, $left);
+            $parts[] = substr($rgba8, (($y - $offset_y) * $width + $target->x - $offset_x) * 4, $run);
+            $parts[] = substr($this->bytes, $row + $left + $run, $stride - $left - $run);
+        }
+        $parts[] = substr($this->bytes, $target->bottom() * $stride);
+        $this->bytes = implode('', $parts);
     }
 
     public function paintSpans(string $spans, int $rgba8): ?Region

@@ -223,8 +223,14 @@ abstract class PagedFramebuffer implements PagedFramebufferContract
     public function blitFrom(Framebuffer $source, int $offset_x = 0, int $offset_y = 0): Framebuffer
     {
         [$rgba8, $width, $height, $top] = $this->blitSource($source);
+
+        return $this->writeRgba8($rgba8, $width, $height, $offset_x, $offset_y + $top);
+    }
+
+    public function writeRgba8(string $rgba8, int $width, int $height, int $x = 0, int $y = 0): static
+    {
         $page = $this->pageRegion($this->page);
-        $this->window->store()->blitRgba8($rgba8, $width, $height, $offset_x, $offset_y + $top - $page->y, new Region(0, 0, $page->width, $page->height));
+        $this->window->store()->blitRgba8($rgba8, $width, $height, $x, $y - $page->y, new Region(0, 0, $page->width, $page->height));
 
         return $this;
     }

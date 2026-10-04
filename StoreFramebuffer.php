@@ -129,7 +129,12 @@ abstract class StoreFramebuffer implements Framebuffer
     {
         [$rgba8, $width, $height, $top] = $this->blitSource($source);
 
-        return $this->wrote($this->store->blitRgba8($rgba8, $width, $height, $offset_x, $offset_y + $top));
+        return $this->writeRgba8($rgba8, $width, $height, $offset_x, $offset_y + $top);
+    }
+
+    public function writeRgba8(string $rgba8, int $width, int $height, int $x = 0, int $y = 0): static
+    {
+        return $this->wrote($this->store->blitRgba8($rgba8, $width, $height, $x, $y));
     }
 
     public function dump(?int $layer = null): string
