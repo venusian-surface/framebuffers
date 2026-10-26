@@ -292,6 +292,15 @@ abstract class RingFramebuffer implements RingFramebufferContract
         return $this;
     }
 
+    /** Moves the last frame's pixels: the back is repaired first, since it holds an older frame. */
+    public function scroll(Region $region, int $dx, int $dy): void
+    {
+        if (! $this->repaired) {
+            $this->repair();
+        }
+        $this->slots[$this->drawable()]->scroll($region, $dx, $dy);
+    }
+
     public function dump(?int $layer = null): string
     {
         return $this->slots[$this->front]->dump($layer);

@@ -130,6 +130,11 @@ final class HdrImage implements Framebuffer
         throw self::readOnly();
     }
 
+    public function scroll(Region $region, int $dx, int $dy): void
+    {
+        throw self::readOnly();
+    }
+
     public function dump(?int $layer = null): string
     {
         return $this->sdr()->dump($layer);

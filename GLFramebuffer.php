@@ -172,6 +172,19 @@ abstract class GLFramebuffer implements GLFramebufferContract
         return $this->through(fn (Framebuffer $copy) => $copy->writeRgba8($rgba8, $width, $height, $x, $y));
     }
 
+    public function scroll(Region $region, int $dx, int $dy): void
+    {
+        $clip = $region->intersect($this->whole());
+        $source = is_null($clip) ? null : StoreFramebuffer::scrollSource($clip, $dx, $dy);
+        if (is_null($source)) {
+            return;
+        }
+        $this->through(function (Framebuffer $copy) use ($source, $dx, $dy): void {
+            $copy->writeRgba8($copy->flushRegion($source, FormatSpec::rgba8()), $source->width, $source->height, $source->x + $dx, $source->y + $dy);
+        });
+        $this->record->add($clip);
+    }
+
     public function dump(?int $layer = null): string
     {
         return $this->toRgba8();

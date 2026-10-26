@@ -137,6 +137,28 @@ abstract class StoreFramebuffer implements Framebuffer
         return $this->wrote($this->store->blitRgba8($rgba8, $width, $height, $x, $y));
     }
 
+    public function scroll(Region $region, int $dx, int $dy): void
+    {
+        $clip = $region->intersect(new Region(0, 0, $this->width, $this->height));
+        $source = is_null($clip) ? null : self::scrollSource($clip, $dx, $dy);
+        if (is_null($source)) {
+            return;
+        }
+        // The read is a copy: the write may overlap it.
+        $this->store->blitRgba8($this->store->region($source, FormatSpec::rgba8()), $source->width, $source->height, $source->x + $dx, $source->y + $dy);
+        $this->touched($clip);
+    }
+
+    /** The part of $clip whose pixels land inside $clip moved by ($dx, $dy); null when none do or none move. */
+    public static function scrollSource(Region $clip, int $dx, int $dy): ?Region
+    {
+        if ($dx === 0 && $dy === 0) {
+            return null;
+        }
+
+        return (new Region($clip->x - $dx, $clip->y - $dy, $clip->width, $clip->height))->intersect($clip);
+    }
+
     public function dump(?int $layer = null): string
     {
         return $this->store->bytes($layer);

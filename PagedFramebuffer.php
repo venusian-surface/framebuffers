@@ -235,6 +235,12 @@ abstract class PagedFramebuffer implements PagedFramebufferContract
         return $this;
     }
 
+    /** @throws FramebufferException Always: the rows off the current page are not held. */
+    public function scroll(Region $region, int $dx, int $dy): void
+    {
+        throw new FramebufferException('A paged framebuffer holds one page at a time: it cannot scroll.');
+    }
+
     /** The window's raw bytes: page_rows tall even on a short last page. */
     public function dump(?int $layer = null): string
     {
