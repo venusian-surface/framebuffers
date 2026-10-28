@@ -9,7 +9,7 @@
         "epaper"
     ],
     "license": "MIT",
-    "homepage": "https://venusian.projectsaturnstudios.com/ecosystem/venusian/surface/0.10.x/framebuffers",
+    "homepage": "https://venusian.projectsaturnstudios.com/ecosystem/venusian/surface/0.11.x/framebuffers",
     "support": {
         "issues": "https://github.com/VenusianPHP/surface/issues",
         "source": "https://github.com/venusian-surface/framebuffers"
@@ -21,14 +21,14 @@
         }
     ],
     "require": {
-        "php": "^8.4|^8.5|^8.6",
-        "venusian-surface/contracts": "^0.10.0",
-        "venusian-surface/nuts-and-bolts": "^0.10.0",
-        "venusian-voyager/contracts": "^0.10.1",
-        "venusian-voyager/nuts-and-bolts": "^0.10.1"
+        "php": "~8.4.27||^8.5.12",
+        "venusian-surface/contracts": "^0.11.0",
+        "venusian-surface/nuts-and-bolts": "^0.11.0",
+        "venusian-voyager/contracts": "^0.11.0",
+        "venusian-voyager/nuts-and-bolts": "^0.11.0"
     },
     "suggest": {
-        "ext-fb": "^0.10.0 - The 'extended' driver: the same five kinds with their bytes held in C."
+        "ext-fb": "^0.10.0|^0.11.0 - The 'extended' driver: the same five kinds with their bytes held in C."
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
@@ -42,7 +42,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.10.x-dev"
+            "dev-main": "0.11.x-dev"
         },
         "venusian": {
             "providers": [
