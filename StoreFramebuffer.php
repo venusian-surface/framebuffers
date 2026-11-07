@@ -10,6 +10,7 @@ use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\NutsAndBolts\Affine;
+use Surface\NutsAndBolts\GradientSpread;
 
 /**
  * The whole Framebuffer contract over one PixelStore. Subclasses say where the
@@ -95,17 +96,22 @@ abstract class StoreFramebuffer implements Framebuffer
         return $this->wrote($this->store->paintSpans($spans, $rgba8));
     }
 
-    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
         [$rgba8, $width, $height, $top] = $this->blitSource($source);
-        $plan = ImagePlacement::plan($placement, $width, $height, $top, Region::wholeSurface($this->width, $this->height), $clip, $opacity);
+        $plan = ImagePlacement::plan($placement, $width, $height, $top, Region::wholeSurface($this->width, $this->height), $clip, $opacity, $window);
         if (is_null($plan)) {
             return $this;
         }
-        [$target, $inverse] = $plan;
-        $this->store->paintRgba8($rgba8, $width, $height, $inverse, $target, $opacity, $filter);
+        [$target, $inverse, $held] = $plan;
+        $this->store->paintRgba8($rgba8, $width, $height, $inverse, $target, $opacity, $filter, 0, $tint, $held, $coverage);
 
         return $this->wrote($target);
+    }
+
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static
+    {
+        return $this->wrote($this->store->paintGradient($spans, $ramp, $kind, $spread, $inverse));
     }
 
     public function clear(): static

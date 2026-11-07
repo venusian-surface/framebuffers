@@ -9,6 +9,8 @@ use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\ScanDirection;
+use Surface\Contracts\Framebuffers\Spans;
+use Surface\NutsAndBolts\GradientSpread;
 use Surface\Framebuffers\Layout;
 use Surface\Framebuffers\Native\Packings\Packing;
 use Surface\Framebuffers\PixelMapper;
@@ -222,7 +224,51 @@ final class NativePixelStore implements PixelStore
         return $bounds;
     }
 
-    public function paintRgba8(string $rgba8, int $width, int $height, array $inverse, Region $target, int $opacity, Filter $filter, int $row = 0): void
+    /** Along a span the position steps by the inverse's x column, so a pixel costs two additions, not a multiply. */
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse, int $row = 0): ?Region
+    {
+        if (strlen($ramp) !== 1024) {
+            throw new FramebufferException('paintGradient() takes a ramp of 256 RGBA8 colours (1024 bytes), got '.strlen($ramp).'.');
+        }
+        if ($kind !== 'linear' && $kind !== 'radial') {
+            throw new FramebufferException("paintGradient() takes a kind 'linear' or 'radial', got '{$kind}'.");
+        }
+        if (count($inverse) !== 6 || array_filter($inverse, fn (mixed $n): bool => (is_int($n) || is_float($n)) && is_finite($n)) !== $inverse) {
+            throw new FramebufferException('paintGradient() takes an inverse of six finite numbers.');
+        }
+        if ($row < 0 || $row > 0xFFFF) {
+            throw new FramebufferException("paintGradient() takes a row 0..65535, got {$row}.");
+        }
+        [$list, $bounds] = SpanList::read($spans, 0xFFFFFFFF, $this->width, $this->height);
+        [$ia, $ib, $ic, $id, $ie, $if] = array_values($inverse);
+        $blends = in_array($this->mapper->mode(), [PixelMapperMode::RGB, PixelMapperMode::GREY], true);
+        $radial = $kind === 'radial';
+
+        foreach ($list as [$y, $x, $length, $cover]) {
+            $py = ($y + $row) + 0.5;
+            $px = $x + 0.5;
+            $u = $ia * $px + $ic * $py + $ie;
+            $v = $ib * $px + $id * $py + $if;
+            for ($i = 0; $i < $length; $i++, $u += $ia, $v += $ib) {
+                $t = $radial ? hypot($u, $v) : $u;
+                $t = match ($spread) {
+                    GradientSpread::PAD => min(1.0, max(0.0, $t)),
+                    GradientSpread::REPEAT => $t - floor($t),
+                    GradientSpread::REFLECT => ($m = $t - 2.0 * floor($t / 2.0)) > 1.0 ? 2.0 - $m : $m,
+                };
+                $at = ((int) floor($t * 255 + 0.5)) * 4;
+                $alpha = ord($ramp[$at + 3]);
+                if ($cover !== 255) {
+                    $alpha = intdiv($alpha * $cover + 127, 255);
+                }
+                $this->blend($x + $i, $y, ord($ramp[$at]), ord($ramp[$at + 1]), ord($ramp[$at + 2]), $alpha, $blends);
+            }
+        }
+
+        return $bounds;
+    }
+
+    public function paintRgba8(string $rgba8, int $width, int $height, array $inverse, Region $target, int $opacity, Filter $filter, int $row = 0, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): void
     {
         if ($width < 1 || $height < 1 || strlen($rgba8) !== $width * $height * 4) {
             throw new FramebufferException("paintRgba8() takes {$width}x{$height} RGBA8 pixels (".($width * $height * 4).' bytes), got '.strlen($rgba8).'.');
@@ -236,7 +282,33 @@ final class NativePixelStore implements PixelStore
         if (count($inverse) !== 6 || array_filter($inverse, fn (mixed $n): bool => (is_int($n) || is_float($n)) && is_finite($n)) !== $inverse) {
             throw new FramebufferException('paintRgba8() takes an inverse of six finite numbers.');
         }
+        if ($tint < 0 || $tint > 0xFFFFFFFF) {
+            throw new FramebufferException("paintRgba8() takes a tint 0xRRGGBBAA, got {$tint}.");
+        }
+        if (! is_null($window) && (count($window) !== 4 || ! ($window[0] < $window[2] && $window[1] < $window[3]))) {
+            throw new FramebufferException('paintRgba8() takes a window [u0, v0, u1, v1] with u0 < u1 and v0 < v1.');
+        }
         $this->inside($target);
+
+        // the mask by row: [from, to, coverage] runs, ascending
+        $mask = null;
+        if (! is_null($coverage)) {
+            $mask = [];
+            $lastY = -1;
+            $lastEnd = 0;
+            foreach (Spans::unpack($coverage) as $i => [$my, $mx, $mlength, $mcover]) {
+                if ($mlength < 1 || $my >= $this->height || $mx + $mlength > $this->width) {
+                    throw new FramebufferException("paintRgba8() takes coverage inside the {$this->width}x{$this->height} store: span {$i} is empty or outside.");
+                }
+                if ($my < $lastY || ($my === $lastY && $mx < $lastEnd)) {
+                    throw new FramebufferException("paintRgba8() takes coverage in order: span {$i} is out of order (rows ascend, x ascends without overlap within a row).");
+                }
+                [$lastY, $lastEnd] = [$my, $mx + $mlength];
+                $mask[$my][] = [$mx, $mx + $mlength, $mcover];
+            }
+        }
+        [$tr, $tg, $tb, $ta] = [($tint >> 24) & 0xFF, ($tint >> 16) & 0xFF, ($tint >> 8) & 0xFF, $tint & 0xFF];
+        $tinted = $tint !== 0xFFFFFFFF;
 
         [$ia, $ib, $ic, $id, $ie, $if] = array_values($inverse);
         $smooth = $filter === Filter::LINEAR;
@@ -244,12 +316,30 @@ final class NativePixelStore implements PixelStore
 
         for ($y = $target->y; $y < $target->bottom(); $y++) {
             $py = ($y + $row) + 0.5;
+            $runs = $mask[$y] ?? [];
+            $run = 0;
+            if (! is_null($mask) && $runs === []) {
+                continue;
+            }
             for ($x = $target->x; $x < $target->right(); $x++) {
                 $px = $x + 0.5;
                 $u = $ia * $px + $ic * $py + $ie;
                 $v = $ib * $px + $id * $py + $if;
                 if (! ($u >= 0 && $u < $width && $v >= 0 && $v < $height)) {
                     continue;
+                }
+                if (! is_null($window) && ! ($u >= $window[0] && $u < $window[2] && $v >= $window[1] && $v < $window[3])) {
+                    continue;
+                }
+                $cover = 255;
+                if (! is_null($mask)) {
+                    while ($run < count($runs) && $runs[$run][1] <= $x) {
+                        $run++;
+                    }
+                    if ($run >= count($runs) || $runs[$run][0] > $x) {
+                        continue;
+                    }
+                    $cover = $runs[$run][2];
                 }
 
                 if (! $smooth) {
@@ -284,7 +374,17 @@ final class NativePixelStore implements PixelStore
                     [$red, $green, $blue, $alpha] = [intdiv($red + $half, $sum), intdiv($green + $half, $sum), intdiv($blue + $half, $sum), ($sum + 32768) >> 16];
                 }
 
-                $this->blend($x, $y, $red, $green, $blue, intdiv($alpha * $opacity + 127, 255), $blends);
+                if ($tinted) {
+                    $red = intdiv($red * $tr + 127, 255);
+                    $green = intdiv($green * $tg + 127, 255);
+                    $blue = intdiv($blue * $tb + 127, 255);
+                    $alpha = intdiv($alpha * $ta + 127, 255);
+                }
+                $alpha = intdiv($alpha * $opacity + 127, 255);
+                if ($cover !== 255) {
+                    $alpha = intdiv($alpha * $cover + 127, 255);
+                }
+                $this->blend($x, $y, $red, $green, $blue, $alpha, $blends);
             }
         }
     }

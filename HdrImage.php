@@ -10,6 +10,7 @@ use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Framebuffers\Native\NativeFullFramebuffer;
 use Surface\NutsAndBolts\Affine;
+use Surface\NutsAndBolts\GradientSpread;
 
 /**
  * An image brighter than SDR white: half floats, little-endian, R G B A,
@@ -100,7 +101,12 @@ final class HdrImage implements Framebuffer
         throw self::readOnly();
     }
 
-    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
+    {
+        throw self::readOnly();
+    }
+
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static
     {
         throw self::readOnly();
     }

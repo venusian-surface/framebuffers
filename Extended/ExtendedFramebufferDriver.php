@@ -15,11 +15,20 @@ use Surface\Contracts\Framebuffers\RingFramebuffer;
 /** The five kinds with their bytes in C, through ext-fb. */
 class ExtendedFramebufferDriver implements FramebufferDriver
 {
-    /** @throws FramebufferException When this PHP has no ext-fb, or one older than 0.10 (which has no FbBuffer class). */
+    /** The oldest ext-fb this driver runs on: 0.11.1 paints an image's tint, window and mask. */
+    public const string MINIMUM = '0.11.1';
+
+    /** Whether this PHP has an ext-fb of at least MINIMUM loaded. */
+    public static function available(): bool
+    {
+        return class_exists(FbBuffer::class, false) && version_compare((string) phpversion('fb'), self::MINIMUM, '>=');
+    }
+
+    /** @throws FramebufferException When this PHP has no ext-fb, or one older than MINIMUM. */
     public function __construct()
     {
-        if (! class_exists(FbBuffer::class, false)) {
-            throw FramebufferException::extensionMissing('fb');
+        if (! self::available()) {
+            throw FramebufferException::extensionMissing('fb', self::MINIMUM);
         }
     }
 

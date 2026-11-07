@@ -5,6 +5,7 @@ namespace Surface\Framebuffers\Extended;
 use FbBuffer;
 use Surface\Contracts\Framebuffers\DamageGranularity;
 use Surface\Contracts\Framebuffers\Filter;
+use Surface\NutsAndBolts\GradientSpread;
 use Surface\Contracts\Framebuffers\FormatSpec;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
@@ -137,10 +138,19 @@ final class ExtendedPixelStore implements PixelStore
         }
     }
 
-    public function paintRgba8(string $rgba8, int $width, int $height, array $inverse, Region $target, int $opacity, Filter $filter, int $row = 0): void
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse, int $row = 0): ?Region
     {
         try {
-            $this->buffer->paintRgba8($rgba8, $width, $height, $inverse, $target->x, $target->y, $target->width, $target->height, $opacity, $filter === Filter::LINEAR, $row);
+            return self::region_of($this->buffer->paintGradient($spans, $ramp, $kind === 'radial', ['pad' => 0, 'repeat' => 1, 'reflect' => 2][$spread->value], $inverse, $row));
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function paintRgba8(string $rgba8, int $width, int $height, array $inverse, Region $target, int $opacity, Filter $filter, int $row = 0, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): void
+    {
+        try {
+            $this->buffer->paintRgba8($rgba8, $width, $height, $inverse, $target->x, $target->y, $target->width, $target->height, $opacity, $filter === Filter::LINEAR, $row, $tint, $window, $coverage);
         } catch (ValueError $e) {
             throw new FramebufferException($e->getMessage(), previous: $e);
         }

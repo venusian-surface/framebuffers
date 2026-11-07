@@ -10,6 +10,7 @@ use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\RingFramebuffer as RingFramebufferContract;
 use Surface\NutsAndBolts\Affine;
+use Surface\NutsAndBolts\GradientSpread;
 
 /**
  * A swap chain of $frames whole frames. Each frame is a dirty framebuffer, so
@@ -252,9 +253,16 @@ abstract class RingFramebuffer implements RingFramebufferContract
         return $this;
     }
 
-    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
-        $this->slots[$this->drawable()]->paintImage($source, $placement, $opacity, $filter, $clip);
+        $this->slots[$this->drawable()]->paintImage($source, $placement, $opacity, $filter, $clip, $tint, $window, $coverage);
+
+        return $this;
+    }
+
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static
+    {
+        $this->slots[$this->drawable()]->paintGradient($spans, $ramp, $kind, $spread, $inverse);
 
         return $this;
     }

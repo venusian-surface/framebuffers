@@ -28,7 +28,7 @@
         "venusian-voyager/nuts-and-bolts": "^0.11.0"
     },
     "suggest": {
-        "ext-fb": "^0.10.0|^0.11.0 - The 'extended' driver: the same five kinds with their bytes held in C."
+        "ext-fb": "^0.11.1 - The 'extended' driver: the same five kinds with their bytes held in C."
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

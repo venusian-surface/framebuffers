@@ -13,6 +13,7 @@ use Surface\Contracts\Framebuffers\PixelFormat;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\Spans;
 use Surface\NutsAndBolts\Affine;
+use Surface\NutsAndBolts\GradientSpread;
 
 /**
  * One page_rows-tall window over a width x height virtual surface, in any
@@ -186,16 +187,43 @@ abstract class PagedFramebuffer implements PagedFramebufferContract
     }
 
     /** Planned against the current page's rows of the virtual surface, then painted page-relative. */
-    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
         [$rgba8, $width, $height, $top] = $this->blitSource($source);
         $page = $this->pageRegion($this->page);
-        $plan = ImagePlacement::plan($placement, $width, $height, $top, $page, $clip, $opacity);
+        $plan = ImagePlacement::plan($placement, $width, $height, $top, $page, $clip, $opacity, $window);
         if (is_null($plan)) {
             return $this;
         }
-        [$target, $inverse] = $plan;
-        $this->window->store()->paintRgba8($rgba8, $width, $height, $inverse, new Region($target->x, $target->y - $page->y, $target->width, $target->height), $opacity, $filter, $page->y);
+        [$target, $inverse, $held] = $plan;
+        // the mask's rows are the virtual surface's: the window's store counts from the page's first row
+        $mask = null;
+        if (! is_null($coverage)) {
+            $mask = '';
+            foreach (SpanList::read($coverage, 0xFFFFFFFF, $this->width, $this->height)[0] as [$y, $x, $length, $cover]) {
+                if ($y >= $page->y && $y < $page->bottom()) {
+                    $mask .= Spans::pack($y - $page->y, $x, $length, $cover);
+                }
+            }
+        }
+        $this->window->store()->paintRgba8($rgba8, $width, $height, $inverse, new Region($target->x, $target->y - $page->y, $target->width, $target->height), $opacity, $filter, $page->y, $tint, $held, $mask);
+
+        return $this;
+    }
+
+    /** Spans are the virtual surface's; the rows off the current page are dropped, the rest painted page-relative. */
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static
+    {
+        $page = $this->pageRegion($this->page);
+        $kept = '';
+        foreach (SpanList::read($spans, 0xFFFFFFFF, $this->width, $this->height)[0] as [$y, $x, $length, $coverage]) {
+            if ($y >= $page->y && $y < $page->bottom()) {
+                $kept .= Spans::pack($y - $page->y, $x, $length, $coverage);
+            }
+        }
+        if ($kept !== '') {
+            $this->window->store()->paintGradient($kept, $ramp, $kind, $spread, $inverse, $page->y);
+        }
 
         return $this;
     }

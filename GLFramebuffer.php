@@ -13,6 +13,7 @@ use Surface\Contracts\Framebuffers\Region;
 use Surface\Framebuffers\Native\NativeDirtyFramebuffer;
 use Surface\Framebuffers\Native\NativeFullFramebuffer;
 use Surface\NutsAndBolts\Affine;
+use Surface\NutsAndBolts\GradientSpread;
 
 /**
  * Everything engine-neutral about a GPU engine's framebuffer. A package's
@@ -142,9 +143,14 @@ abstract class GLFramebuffer implements GLFramebufferContract
         return $this->through(fn (Framebuffer $copy) => $copy->paintSpans($spans, $rgba8));
     }
 
-    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null): static
+    public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
-        return $this->through(fn (Framebuffer $copy) => $copy->paintImage($source, $placement, $opacity, $filter, $clip));
+        return $this->through(fn (Framebuffer $copy) => $copy->paintImage($source, $placement, $opacity, $filter, $clip, $tint, $window, $coverage));
+    }
+
+    public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static
+    {
+        return $this->through(fn (Framebuffer $copy) => $copy->paintGradient($spans, $ramp, $kind, $spread, $inverse));
     }
 
     public function clear(): static
