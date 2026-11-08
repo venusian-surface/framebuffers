@@ -9,6 +9,7 @@ use Surface\Contracts\Framebuffers\Framebuffer;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\PixelStore;
 use Surface\Contracts\Framebuffers\Region;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\Affine;
 use Surface\NutsAndBolts\GradientSpread;
 
@@ -96,6 +97,50 @@ abstract class StoreFramebuffer implements Framebuffer
         return $this->wrote($this->store->paintSpans($spans, $rgba8));
     }
 
+    public function kawaseDown(Framebuffer $source, Region $region): static
+    {
+        $this->store->kawaseDown(self::storeOf($source), $region);
+
+        return $this;
+    }
+
+    public function kawaseUp(Framebuffer $source): static
+    {
+        $this->store->kawaseUp(self::storeOf($source));
+
+        return $this;
+    }
+
+    public function paintGlass(array $geometry, Framebuffer $blur, int $scale, ?Framebuffer $sharp, int $originX, int $originY, array $look, Region $clip): static
+    {
+        return $this->wrote($this->store->paintGlass($geometry, self::storeOf($blur), $scale, $sharp === null ? null : self::storeOf($sharp), $originX, $originY, $look, $clip));
+    }
+
+    /** The store of a glass level: a frame of this kind. */
+    private static function storeOf(Framebuffer $frame): PixelStore
+    {
+        return $frame instanceof self ? $frame->store : throw new FramebufferException('Glass levels are frames of a store-backed framebuffer.');
+    }
+
+    public function spanSink(): ?object
+    {
+        return $this->store instanceof Extended\ExtendedPixelStore ? $this->store->buffer() : null;
+    }
+
+    public function paintedSpans(array $regions): static
+    {
+        foreach ($regions as $region) {
+            $this->wrote($region);
+        }
+
+        return $this;
+    }
+
+    public function paintMasks(array $masks, int $rgba8, Region $clip): static
+    {
+        return $this->wrote($this->store->paintMasks($masks, $rgba8, $clip));
+    }
+
     public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
         [$rgba8, $width, $height, $top] = $this->blitSource($source);
@@ -107,6 +152,22 @@ abstract class StoreFramebuffer implements Framebuffer
         $this->store->paintRgba8($rgba8, $width, $height, $inverse, $target, $opacity, $filter, 0, $tint, $held, $coverage);
 
         return $this->wrote($target);
+    }
+
+    public function scratch(int $width, int $height): Framebuffer
+    {
+        return new ScratchFramebuffer($this, $width, $height);
+    }
+
+    public function filter(FilterChain $chain, ?Region $region = null, bool $premultiplied = false): static
+    {
+        $region = Region::wholeSurface($this->width, $this->height)->intersect($region ?? Region::wholeSurface($this->width, $this->height));
+        if (! is_null($region)) {
+            $this->store->filter($chain, $region, 0, $premultiplied);
+            $this->wrote($region);
+        }
+
+        return $this;
     }
 
     public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static

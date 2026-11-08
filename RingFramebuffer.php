@@ -9,6 +9,7 @@ use Surface\Contracts\Framebuffers\Framebuffer;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\RingFramebuffer as RingFramebufferContract;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\Affine;
 use Surface\NutsAndBolts\GradientSpread;
 
@@ -253,9 +254,61 @@ abstract class RingFramebuffer implements RingFramebufferContract
         return $this;
     }
 
+    public function kawaseDown(Framebuffer $source, Region $region): static
+    {
+        $this->slots[$this->drawable()]->kawaseDown($source, $region);
+
+        return $this;
+    }
+
+    public function kawaseUp(Framebuffer $source): static
+    {
+        $this->slots[$this->drawable()]->kawaseUp($source);
+
+        return $this;
+    }
+
+    public function paintGlass(array $geometry, Framebuffer $blur, int $scale, ?Framebuffer $sharp, int $originX, int $originY, array $look, Region $clip): static
+    {
+        $this->slots[$this->drawable()]->paintGlass($geometry, $blur, $scale, $sharp, $originX, $originY, $look, $clip);
+
+        return $this;
+    }
+
+    public function spanSink(): ?object
+    {
+        return $this->slots[$this->drawable()]->spanSink();
+    }
+
+    public function paintedSpans(array $regions): static
+    {
+        $this->slots[$this->drawable()]->paintedSpans($regions);
+
+        return $this;
+    }
+
+    public function paintMasks(array $masks, int $rgba8, Region $clip): static
+    {
+        $this->slots[$this->drawable()]->paintMasks($masks, $rgba8, $clip);
+
+        return $this;
+    }
+
     public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
         $this->slots[$this->drawable()]->paintImage($source, $placement, $opacity, $filter, $clip, $tint, $window, $coverage);
+
+        return $this;
+    }
+
+    public function scratch(int $width, int $height): Framebuffer
+    {
+        return $this->slots[0]->scratch($width, $height);
+    }
+
+    public function filter(FilterChain $chain, ?Region $region = null, bool $premultiplied = false): static
+    {
+        $this->slots[$this->drawable()]->filter($chain, $region, $premultiplied);
 
         return $this;
     }

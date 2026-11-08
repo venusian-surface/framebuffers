@@ -10,8 +10,10 @@ use Surface\Contracts\Framebuffers\PixelStore;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\ScanDirection;
 use Surface\Contracts\Framebuffers\Spans;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\GradientSpread;
 use Surface\Framebuffers\Layout;
+use Surface\Framebuffers\MaskList;
 use Surface\Framebuffers\Native\Packings\Packing;
 use Surface\Framebuffers\PixelMapper;
 use Surface\Framebuffers\PixelMapperMode;
@@ -202,26 +204,86 @@ final class NativePixelStore implements PixelStore
     public function paintSpans(string $spans, int $rgba8): ?Region
     {
         [$list, $bounds] = SpanList::read($spans, $rgba8, $this->width, $this->height);
-        [$red, $green, $blue, $alpha] = [($rgba8 >> 24) & 0xFF, ($rgba8 >> 16) & 0xFF, ($rgba8 >> 8) & 0xFF, $rgba8 & 0xFF];
-        $word = $this->mapper->fromRgba8($red, $green, $blue, $alpha);
-        $blends = in_array($this->mapper->mode(), [PixelMapperMode::RGB, PixelMapperMode::GREY], true);
-
+        $paint = $this->runPaint($rgba8);
         foreach ($list as [$y, $x, $length, $coverage]) {
-            $a = intdiv($alpha * $coverage + 127, 255);
-            if ($a === 0 || (! $blends && $a < 128)) {
-                continue;
-            }
-            if ($a === 255 || ! $blends) {
-                $this->packing->span($this->bytes, $x, $y, $length, $word);
-
-                continue;
-            }
-            for ($i = $x; $i < $x + $length; $i++) {
-                $this->blend($i, $y, $red, $green, $blue, $a, true);
-            }
+            $this->paintRun($x, $y, $length, $coverage, $paint);
         }
 
         return $bounds;
+    }
+
+    /** Each mask row cut to the clip, walked run by run of one coverage (strspn finds a run in C), each run painted as a span. */
+    public function paintMasks(array $masks, int $rgba8, Region $clip): ?Region
+    {
+        MaskList::check($masks, $rgba8, $clip, $this->width, $this->height);
+        $paint = $this->runPaint($rgba8);
+        $left = $top = PHP_INT_MAX;
+        $right = $bottom = PHP_INT_MIN;
+        foreach ($masks as [$coverage, $width, $mx, $my]) {
+            $y0 = max($my, $clip->y);
+            $y1 = min($my + intdiv(strlen($coverage), $width), $clip->bottom());
+            $x0 = max($mx, $clip->x);
+            $x1 = min($mx + $width, $clip->right());
+            for ($y = $y0; $y < $y1 && $x0 < $x1; $y++) {
+                // the byte of column x on this row is at $at + x
+                $at = ($y - $my) * $width - $mx;
+                for ($x = $x0; $x < $x1; $x += $length) {
+                    $c = $coverage[$at + $x];
+                    $length = strspn($coverage, $c, $at + $x, $x1 - $x);
+                    if ($c !== "\0") {
+                        $this->paintRun($x, $y, $length, ord($c), $paint);
+                        $left = min($left, $x);
+                        $right = max($right, $x + $length);
+                        $top = min($top, $y);
+                        $bottom = max($bottom, $y + 1);
+                    }
+                }
+            }
+        }
+
+        return $right === PHP_INT_MIN ? null : new Region($left, $top, $right - $left, $bottom - $top);
+    }
+
+    /** @return array{int, int, int, int, int, bool} red, green, blue, alpha, the colour's word, whether the format blends */
+    private function runPaint(int $rgba8): array
+    {
+        [$red, $green, $blue, $alpha] = [($rgba8 >> 24) & 0xFF, ($rgba8 >> 16) & 0xFF, ($rgba8 >> 8) & 0xFF, $rgba8 & 0xFF];
+
+        return [$red, $green, $blue, $alpha, $this->mapper->fromRgba8($red, $green, $blue, $alpha), in_array($this->mapper->mode(), [PixelMapperMode::RGB, PixelMapperMode::GREY], true)];
+    }
+
+    /**
+     * A run of $length pixels from (x, y) at one coverage, inside the store: what one span paints.
+     *
+     * @param  array{int, int, int, int, int, bool}  $paint
+     */
+    private function paintRun(int $x, int $y, int $length, int $coverage, array $paint): void
+    {
+        [$red, $green, $blue, $alpha, $word, $blends] = $paint;
+        $a = intdiv($alpha * $coverage + 127, 255);
+        if ($a === 0 || (! $blends && $a < 128)) {
+            return;
+        }
+        if ($a === 255 || ! $blends) {
+            $this->packing->span($this->bytes, $x, $y, $length, $word);
+
+            return;
+        }
+        for ($i = $x; $i < $x + $length; $i++) {
+            $this->blend($i, $y, $red, $green, $blue, $a, true);
+        }
+    }
+
+    public function filter(FilterChain $chain, Region $region, int $row = 0, bool $premultiplied = false): void
+    {
+        $this->inside($region);
+        $all = $this->toRgba8();
+        $stride = $this->width * 4;
+        $pixels = '';
+        for ($y = $region->y; $y < $region->bottom(); $y++) {
+            $pixels .= substr($all, $y * $stride + $region->x * 4, $region->width * 4);
+        }
+        $this->blitRgba8(NativeFilters::run($chain, $pixels, $region->width, $region->height, $region->x, $region->y + $row, $premultiplied), $region->width, $region->height, $region->x, $region->y);
     }
 
     /** Along a span the position steps by the inverse's x column, so a pixel costs two additions, not a multiply. */
@@ -386,6 +448,44 @@ final class NativePixelStore implements PixelStore
                 }
                 $this->blend($x, $y, $red, $green, $blue, $alpha, $blends);
             }
+        }
+    }
+
+    public function kawaseDown(PixelStore $source, Region $region): void
+    {
+        $this->level($source, intdiv($region->width + 1, 2), intdiv($region->height + 1, 2));
+        if ($region->x < 0 || $region->y < 0 || $region->isEmpty() || $region->right() > $source->width() || $region->bottom() > $source->height()) {
+            throw new FramebufferException("The region is empty or not inside the {$source->width()}x{$source->height()} source.");
+        }
+        $this->bytes = NativeGlass::down($source->bytes(), $source->width(), $region);
+    }
+
+    public function kawaseUp(PixelStore $source): void
+    {
+        if ($this->width > 2 * $source->width() || $this->height > 2 * $source->height()) {
+            throw new FramebufferException("A level up of {$source->width()}x{$source->height()} is at most twice its size, this is {$this->width}x{$this->height}.");
+        }
+        $this->level($source, $this->width, $this->height);
+        $this->bytes = NativeGlass::up($source->bytes(), $source->width(), $source->height(), $this->width, $this->height);
+    }
+
+    public function paintGlass(array $geometry, PixelStore $blur, int $scale, ?PixelStore $sharp, int $originX, int $originY, array $look, Region $clip): ?Region
+    {
+        $this->inside($clip);
+        $blends = in_array($this->mapper->mode(), [PixelMapperMode::RGB, PixelMapperMode::GREY], true);
+
+        return NativeGlass::pane($geometry, [$blur->bytes(), $blur->width(), $blur->height()], $scale, $sharp === null ? null : [$sharp->bytes(), $sharp->width(), $sharp->height()],
+            $originX, $originY, $look, $clip, fn (int $x, int $y, int $r, int $g, int $b, int $a) => $this->blend($x, $y, $r, $g, $b, $a, $blends));
+    }
+
+    /** This store and $source are RGBA8, and this one is $width x $height. */
+    private function level(PixelStore $source, int $width, int $height): void
+    {
+        if (! $this->format->equals(FormatSpec::rgba8()) || ! $source->format()->equals(FormatSpec::rgba8())) {
+            throw new FramebufferException('Glass levels are RGBA8 stores.');
+        }
+        if ($this->width !== $width || $this->height !== $height) {
+            throw new FramebufferException("A level down of that region is {$width}x{$height}, this is {$this->width}x{$this->height}.");
         }
     }
 

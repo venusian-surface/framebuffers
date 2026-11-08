@@ -9,6 +9,7 @@ use Surface\Contracts\Framebuffers\Framebuffer;
 use Surface\Contracts\Framebuffers\FramebufferException;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Framebuffers\Native\NativeFullFramebuffer;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\Affine;
 use Surface\NutsAndBolts\GradientSpread;
 
@@ -101,7 +102,47 @@ final class HdrImage implements Framebuffer
         throw self::readOnly();
     }
 
+    public function kawaseDown(Framebuffer $source, Region $region): static
+    {
+        throw self::readOnly();
+    }
+
+    public function kawaseUp(Framebuffer $source): static
+    {
+        throw self::readOnly();
+    }
+
+    public function paintGlass(array $geometry, Framebuffer $blur, int $scale, ?Framebuffer $sharp, int $originX, int $originY, array $look, Region $clip): static
+    {
+        throw self::readOnly();
+    }
+
+    public function spanSink(): ?object
+    {
+        return null;
+    }
+
+    public function paintedSpans(array $regions): static
+    {
+        throw self::readOnly();
+    }
+
+    public function paintMasks(array $masks, int $rgba8, Region $clip): static
+    {
+        throw self::readOnly();
+    }
+
     public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
+    {
+        throw self::readOnly();
+    }
+
+    public function scratch(int $width, int $height): Framebuffer
+    {
+        return new NativeFullFramebuffer(FormatSpec::rgba8(), $width, $height);
+    }
+
+    public function filter(FilterChain $chain, ?Region $region = null, bool $premultiplied = false): static
     {
         throw self::readOnly();
     }

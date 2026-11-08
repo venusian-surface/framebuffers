@@ -25,7 +25,7 @@ class FramebufferManager extends Manager
         return $this->config->get('framebuffers.default', 'auto');
     }
 
-    /** Extended when ext-fb 0.11.1 or newer is loaded (an older one cannot paint an image's tint, window and mask), native when not. */
+    /** Extended when ext-fb 0.11.1 or newer is loaded with paintGradient() and filter() (an older build cannot), native when not. */
     public function createAutoDriver(): FramebufferDriver
     {
         return ExtendedFramebufferDriver::available() ? $this->createExtendedDriver() : $this->createNativeDriver();

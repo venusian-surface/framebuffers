@@ -12,6 +12,7 @@ use Surface\Contracts\Framebuffers\GLFramebuffer as GLFramebufferContract;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Framebuffers\Native\NativeDirtyFramebuffer;
 use Surface\Framebuffers\Native\NativeFullFramebuffer;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\Affine;
 use Surface\NutsAndBolts\GradientSpread;
 
@@ -143,9 +144,50 @@ abstract class GLFramebuffer implements GLFramebufferContract
         return $this->through(fn (Framebuffer $copy) => $copy->paintSpans($spans, $rgba8));
     }
 
+    public function kawaseDown(Framebuffer $source, Region $region): static
+    {
+        return $this->through(fn (Framebuffer $copy) => $copy->kawaseDown($source, $region));
+    }
+
+    public function kawaseUp(Framebuffer $source): static
+    {
+        return $this->through(fn (Framebuffer $copy) => $copy->kawaseUp($source));
+    }
+
+    public function paintGlass(array $geometry, Framebuffer $blur, int $scale, ?Framebuffer $sharp, int $originX, int $originY, array $look, Region $clip): static
+    {
+        return $this->through(fn (Framebuffer $copy) => $copy->paintGlass($geometry, $blur, $scale, $sharp, $originX, $originY, $look, $clip));
+    }
+
+    /** None: its pixels are a copy of a GPU target, so spans go through paintSpans(). */
+    public function spanSink(): ?object
+    {
+        return null;
+    }
+
+    public function paintedSpans(array $regions): static
+    {
+        throw new FramebufferException('This framebuffer has no span sink to have painted into.');
+    }
+
+    public function paintMasks(array $masks, int $rgba8, Region $clip): static
+    {
+        return $this->through(fn (Framebuffer $copy) => $copy->paintMasks($masks, $rgba8, $clip));
+    }
+
     public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
         return $this->through(fn (Framebuffer $copy) => $copy->paintImage($source, $placement, $opacity, $filter, $clip, $tint, $window, $coverage));
+    }
+
+    public function scratch(int $width, int $height): Framebuffer
+    {
+        return new NativeFullFramebuffer(FormatSpec::rgba8(), $width, $height);
+    }
+
+    public function filter(FilterChain $chain, ?Region $region = null, bool $premultiplied = false): static
+    {
+        return $this->through(fn (Framebuffer $copy) => $copy->filter($chain, $region, $premultiplied));
     }
 
     public function paintGradient(string $spans, string $ramp, string $kind, GradientSpread $spread, array $inverse): static

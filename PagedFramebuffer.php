@@ -12,6 +12,7 @@ use Surface\Contracts\Framebuffers\PagedFramebuffer as PagedFramebufferContract;
 use Surface\Contracts\Framebuffers\PixelFormat;
 use Surface\Contracts\Framebuffers\Region;
 use Surface\Contracts\Framebuffers\Spans;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\Affine;
 use Surface\NutsAndBolts\GradientSpread;
 
@@ -186,6 +187,46 @@ abstract class PagedFramebuffer implements PagedFramebufferContract
         return $this;
     }
 
+    /** The clip is checked against the whole virtual surface; it is cut to the current page and the masks painted page-relative. */
+    public function kawaseDown(Framebuffer $source, Region $region): static
+    {
+        throw new FramebufferException('A framebuffer that holds one page of the surface cannot be a glass level.');
+    }
+
+    public function kawaseUp(Framebuffer $source): static
+    {
+        throw new FramebufferException('A framebuffer that holds one page of the surface cannot be a glass level.');
+    }
+
+    public function paintGlass(array $geometry, Framebuffer $blur, int $scale, ?Framebuffer $sharp, int $originX, int $originY, array $look, Region $clip): static
+    {
+        throw new FramebufferException('A framebuffer that holds one page of the surface cannot draw glass.');
+    }
+
+    /** None: it holds one page at an offset, so spans go through paintSpans(). */
+    public function spanSink(): ?object
+    {
+        return null;
+    }
+
+    public function paintedSpans(array $regions): static
+    {
+        throw new FramebufferException('This framebuffer has no span sink to have painted into.');
+    }
+
+    public function paintMasks(array $masks, int $rgba8, Region $clip): static
+    {
+        MaskList::check($masks, $rgba8, $clip, $this->width, $this->height);
+        $page = $this->pageRegion($this->page);
+        $kept = $clip->intersect($page);
+        if (! is_null($kept)) {
+            $moved = array_map(fn (array $mask): array => [$mask[0], $mask[1], $mask[2], $mask[3] - $page->y], $masks);
+            $this->window->paintMasks($moved, $rgba8, new Region($kept->x, $kept->y - $page->y, $kept->width, $kept->height));
+        }
+
+        return $this;
+    }
+
     /** Planned against the current page's rows of the virtual surface, then painted page-relative. */
     public function paintImage(Framebuffer $source, Affine $placement, int $opacity = 255, Filter $filter = Filter::NEAREST, ?Region $clip = null, int $tint = 0xFFFFFFFF, ?array $window = null, ?string $coverage = null): static
     {
@@ -207,6 +248,24 @@ abstract class PagedFramebuffer implements PagedFramebufferContract
             }
         }
         $this->window->store()->paintRgba8($rgba8, $width, $height, $inverse, new Region($target->x, $target->y - $page->y, $target->width, $target->height), $opacity, $filter, $page->y, $tint, $held, $mask);
+
+        return $this;
+    }
+
+    public function scratch(int $width, int $height): Framebuffer
+    {
+        return $this->window->scratch($width, $height);
+    }
+
+    /** The region is the virtual surface's and must lie inside the current page; noise counts rows from the page's first. */
+    public function filter(FilterChain $chain, ?Region $region = null, bool $premultiplied = false): static
+    {
+        $page = $this->pageRegion($this->page);
+        $region ??= $page;
+        if ($region->x < $page->x || $region->right() > $page->right() || $region->y < $page->y || $region->bottom() > $page->bottom()) {
+            throw new FramebufferException('filter() on a paged framebuffer takes a region inside the current page.');
+        }
+        $this->window->store()->filter($chain, new Region($region->x, $region->y - $page->y, $region->width, $region->height), $page->y, $premultiplied);
 
         return $this;
     }

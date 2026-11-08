@@ -5,6 +5,7 @@ namespace Surface\Framebuffers\Extended;
 use FbBuffer;
 use Surface\Contracts\Framebuffers\DamageGranularity;
 use Surface\Contracts\Framebuffers\Filter;
+use Surface\Contracts\Drawing\Effects\FilterChain;
 use Surface\NutsAndBolts\GradientSpread;
 use Surface\Contracts\Framebuffers\FormatSpec;
 use Surface\Contracts\Framebuffers\FramebufferException;
@@ -129,10 +130,69 @@ final class ExtendedPixelStore implements PixelStore
         }
     }
 
+    public function kawaseDown(PixelStore $source, Region $region): void
+    {
+        try {
+            $this->buffer->kawaseDown(self::fb($source), $region->x, $region->y, $region->width, $region->height);
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function kawaseUp(PixelStore $source): void
+    {
+        try {
+            $this->buffer->kawaseUp(self::fb($source));
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function paintGlass(array $geometry, PixelStore $blur, int $scale, ?PixelStore $sharp, int $originX, int $originY, array $look, Region $clip): ?Region
+    {
+        try {
+            return self::region_of($this->buffer->paintGlass(array_slice($geometry, 0, 4), $geometry[4], self::fb($blur), $scale, $sharp === null ? null : self::fb($sharp),
+                $originX, $originY, $look, $clip->x, $clip->y, $clip->width, $clip->height));
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    /** The FbBuffer of a level, which glass takes from stores of this driver only. */
+    private static function fb(PixelStore $store): FbBuffer
+    {
+        return $store instanceof self ? $store->buffer : throw new FramebufferException('Glass levels and the target are stores of one driver.');
+    }
+
+    /** The FbBuffer itself: the span sink ext-rasterize paints into (Framebuffer::spanSink()). */
+    public function buffer(): FbBuffer
+    {
+        return $this->buffer;
+    }
+
     public function paintSpans(string $spans, int $rgba8): ?Region
     {
         try {
             return self::region_of($this->buffer->paintSpans($spans, $rgba8));
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function paintMasks(array $masks, int $rgba8, Region $clip): ?Region
+    {
+        try {
+            return self::region_of($this->buffer->paintMasks($masks, $rgba8, $clip->x, $clip->y, $clip->width, $clip->height));
+        } catch (ValueError $e) {
+            throw new FramebufferException($e->getMessage(), previous: $e);
+        }
+    }
+
+    public function filter(FilterChain $chain, Region $region, int $row = 0, bool $premultiplied = false): void
+    {
+        [$steps, $maps] = FilterSteps::encode($chain);
+        try {
+            $this->buffer->filter($steps, $maps, $region->x, $region->y, $region->width, $region->height, $row, $premultiplied);
         } catch (ValueError $e) {
             throw new FramebufferException($e->getMessage(), previous: $e);
         }
